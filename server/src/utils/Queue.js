@@ -4,8 +4,10 @@ export default class Queue {
   }
 
   enqueue(element) {
-    this.items.push(element); // Add to the end
+  if (!this.items.includes(element)) {
+    this.items.push(element);
   }
+}
 
   dequeue() {
     return this.items.shift(); // Remove from the front

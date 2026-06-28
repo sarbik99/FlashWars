@@ -25,11 +25,14 @@ export function MultiPlayer() {
   const [timer, setTimer] = useState(combatTotalTime); // Timer state
 
   useEffect(() => {
-    // before check if user already has joined
-    socket?.emit("check-joined");
+    if (!socket) return;
 
-    // listen to the response
-    socket?.on("already-joined", (res) => {
+    // Check if the user has already joined a room
+    socket.emit("check-joined");
+
+    // Prevent duplicate listeners
+    socket.off("already-joined");
+    socket.on("already-joined", (res) => {
       console.log(res);
       setRoomId(res.roomId);
       setCombatTotalQuestions(res.clientFlashcards.length);
@@ -38,100 +41,108 @@ export function MultiPlayer() {
         res.clientFlashcards.at(
           Math.min(
             res.clientFlashcards.length - 1,
-            res.status[String(user?.username)]?.length
-          )
-        )
+            res.status[String(user?.username)]?.length,
+          ),
+        ),
       );
       setPlaying(true);
       setLoadingQuestions(false);
     });
 
     if (joining) {
-      // request the backend to join the game
-      socket.emit("join");
       console.log("joining player initialized");
+      // socket.emit("join");
 
-      // listening to response
+      socket.off("join");
       socket.on("join", (res) => {
-        setCombatTotalQuestions(res.clientFlashcards.length);
         console.log(res);
+
+        setCombatTotalQuestions(res.clientFlashcards.length);
         setRoomId(res.roomId);
         setPlayers({ player1: res.player1, player2: res.player2 });
+
         setDisplayFlashcard(
           res.clientFlashcards.at(
             Math.min(
               res.clientFlashcards.length - 1,
-              res.status[String(user?.username)]?.length
-            )
-          )
+              res.status[String(user?.username)]?.length,
+            ),
+          ),
         );
+
         setJoining(false);
         setPlaying(true);
         setLoadingQuestions(false);
       });
     }
 
+    let timerInterval;
+
     if (playing) {
-      // receive the response for answer checking
+      socket.off("recieve-answer");
       socket.on("recieve-answer", (res) => {
         console.log(res.status, res.clientFlashcards);
+
         setAnswersCurrentPlayer(res.status[String(user?.username)]);
+
         const opponentKey =
           String(user?.username) === String(players.player1)
             ? String(players.player2)
             : String(players.player1);
+
         setAnswersOponent(res.status[opponentKey]);
+
         setDisplayFlashcard(
           res.clientFlashcards.at(
             Math.min(
               res.clientFlashcards.length - 1,
-              res.status[String(user?.username)].length
-            )
-          )
+              res.status[String(user?.username)].length,
+            ),
+          ),
         );
       });
 
-      // response after the game ends
+      socket.off("game-result");
       socket.on("game-result", (res) => {
+        console.log(res);
+
         setYourScore(res.points[String(user?.username)]);
+
         setOpponentScore(
           res.points[
             String(user?.username) === String(players.player1)
               ? String(players.player2)
               : String(players.player1)
-          ]
+          ],
         );
-        setWinner(String(res.winner)); // Set winner state
-        setGameEnded(true); // Set gameEnded state
-        console.log(res);
+
+        setWinner(String(res.winner));
+        setGameEnded(true);
       });
 
-      // Start the timer when the game starts
-      const timerInterval = setInterval(() => {
-        setTimer((prevTime) => {
-          if (prevTime > 0) {
-            return prevTime - 1;
-          } else {
-            clearInterval(timerInterval); // Clear the interval when time is up
-            socket.emit("game-over", { roomId }); // Notify the backend
-            return 0;
-          }
+      timerInterval = setInterval(() => {
+        setTimer((prev) => {
+          if (prev > 0) return prev - 1;
+
+          clearInterval(timerInterval);
+          socket.emit("game-over", { roomId });
+          return 0;
         });
       }, 1000);
-
-      // Clear timer and event listeners when component unmounts or playing state changes
-      return () => {
-        clearInterval(timerInterval);
-        socket.off("recieve-answer");
-        socket.off("game-result");
-        socket.off("join");
-        socket.off("already-joined");
-      };
     }
+
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+
+      socket.off("already-joined");
+      socket.off("join");
+      socket.off("recieve-answer");
+      socket.off("game-result");
+    };
   }, [
-    playing,
     socket,
     joining,
+    playing,
     roomId,
     user?.username,
     players.player1,
@@ -178,13 +189,15 @@ export function MultiPlayer() {
                   combatTotalQuestions={combatTotalQuestions}
                 />
               )}
-              <UserCombatProfile
-                username={
-                  String(user?.username) === String(players.player1)
-                    ? players.player1
-                    : players.player2
-                }
-              />
+              {players.player1 && players.player2 && (
+                <UserCombatProfile
+                  username={
+                    String(user?.username) === String(players.player1)
+                      ? players.player1
+                      : players.player2
+                  }
+                />
+              )}
               {allQuestionsSubmittedYou ? (
                 <div className="bg-blue-100 p-6 rounded-2xl shadow-lg border border-blue-300 max-w-lg mx-auto text-center">
                   <h2 className="text-3xl font-extrabold text-blue-700 mb-4">
@@ -210,13 +223,15 @@ export function MultiPlayer() {
                   combatTotalQuestions={combatTotalQuestions}
                 />
               )}
-              <UserCombatProfile
-                username={
-                  String(user?.username) !== String(players.player1)
-                    ? players.player1
-                    : players.player2
-                }
-              />
+              {players.player1 && players.player2 && (
+                <UserCombatProfile
+                  username={
+                    String(user?.username) !== String(players.player1)
+                      ? players.player1
+                      : players.player2
+                  }
+                />
+              )}
               {/* Empty section with blur effect */}
 
               {allQuestionsSubmittedOpponent ? (
@@ -238,7 +253,11 @@ export function MultiPlayer() {
       ) : (
         <div className="flex items-center justify-center min-h-screen">
           <button
-            onClick={() => setJoining(true)}
+            disabled={joining || playing}
+            onClick={() => {
+              setJoining(true);
+              socket.emit("join");
+            }}
             className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-700 text-white font-semibold rounded-2xl shadow-md hover:shadow-lg hover:from-blue-400 hover:to-blue-600 transform hover:scale-105 transition-all duration-300 ease-in-out"
           >
             Play
@@ -251,7 +270,7 @@ export function MultiPlayer() {
 
 export function AnswerIndicators({ submissions, combatTotalQuestions }) {
   const [statuses, setStatuses] = useState(
-    Array(combatTotalQuestions).fill("unanswered")
+    Array(combatTotalQuestions).fill("unanswered"),
   );
 
   // Update statuses based on the submissions array

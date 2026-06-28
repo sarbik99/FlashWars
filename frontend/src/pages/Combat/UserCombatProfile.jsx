@@ -5,10 +5,14 @@ export function UserCombatProfile({ username }) {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const getUserProfile = async (username) => {
+    const getUserProfile = async () => {
+      if (!username) {
+        setUser(null);
+        return;
+      }
       try {
         const res = await axios.get(
-          `${import.meta.env.VITE_BACKEND_URL}/search/username/${username}`
+          `${import.meta.env.VITE_BACKEND_URL}/search/username/${username}`,
         );
         if (res.status === 200) {
           setUser(res.data.user);
@@ -17,7 +21,7 @@ export function UserCombatProfile({ username }) {
         console.error("Error fetching user profile:", error);
       }
     };
-    getUserProfile(username);
+    getUserProfile();
   }, [username]);
 
   return (
