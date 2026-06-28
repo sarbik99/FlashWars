@@ -5,13 +5,12 @@ import { Flashcard } from "../models/flashcard.model.js";
 import GameRoom from "../utils/GameRoom.js";
 import { io } from "../socket.js";
 import { combatTotalQuestions, combatTotalTime } from "../constants.js";
-import { generateMCQ } from "../utils/OpenAI.js";
+import { generateMCQ } from "../utils/AI.js";
 
 const activeUsers = new Map();
 const waitingUsers = new Queue();
 const gameRoomIds = new Map();
 const gameRooms = new Map();
-
 const getFlashcard = async () => {
   const rawFlashcards = await Flashcard.aggregate([
     {
@@ -36,11 +35,31 @@ const getFlashcard = async () => {
       },
     },
   ]);
-  const questions = JSON.stringify(rawFlashcards.map((e, ind) => e.question));
-  // console.log(questions);
-  const ans = await generateMCQ(questions);
-  // console.log(ans);
-  return JSON.parse(ans);
+
+  if (!rawFlashcards.length) {
+    console.error("No flashcards found in the database.");
+    return [];
+  }
+
+  const questions = JSON.stringify(rawFlashcards.map((e) => e.question));
+
+  try {
+    const ans = await generateMCQ(questions);
+
+    if (!ans) {
+      throw new Error("OpenAI returned an empty response.");
+    }
+
+    try {
+      return JSON.parse(ans);
+    } catch (error) {
+      console.error("Invalid JSON returned from OpenAI:", ans);
+      return [];
+    }
+  } catch (err) {
+    console.error("Failed to generate MCQs:", err.message);
+    return [];
+  }
 };
 
 export const socketAuthToken = async (socket, next) => {
@@ -63,7 +82,8 @@ export const socketAuthToken = async (socket, next) => {
     );
     if (!socket.user) return next(new Error("User Not Found"));
   } catch (e) {
-    console.log(e);
+    console.error(e);
+    return next(new Error("Authentication failed"));
   }
   next();
 };
@@ -90,47 +110,70 @@ export const onConnectionController = (socket) => {
     const roomId = gameRoomIds.get(String(user?.username));
     console.log("checking if already in a room", gameRoomIds, roomId);
     if (roomId) {
-      return io.to(socket.id).emit("already-joined", gameRooms.get(roomId).toObject());
+      return io
+        .to(socket.id)
+        .emit("already-joined", gameRooms.get(roomId).toObject());
     }
   });
 
   socket.on("join", async () => {
-    if (!waitingUsers.isEmpty()) {
-      const opponentId = waitingUsers.dequeue();
-      const gameRoom = new GameRoom(user.username, opponentId);
+    try {
+      if (!waitingUsers.isEmpty()) {
+        const opponentId = waitingUsers.dequeue();
+        const gameRoom = new GameRoom(user.username, opponentId);
 
-      //fetch flashcards
-      const flashcards = await getFlashcard();
-      console.log("from join- ",flashcards);
-      gameRoom.addFlashCards(flashcards);
-      gameRoomIds.set(String(user.username), gameRoom.roomId);
-      gameRoomIds.set(opponentId, gameRoom.roomId);
-      gameRooms.set(gameRoom.roomId, gameRoom);
-      console.log(`room created: ${gameRoom.toString()}`);
+        //fetch flashcards
+        const flashcards = await getFlashcard();
+        console.log(JSON.stringify(flashcards, null, 2));
 
-      setTimeout(() => {
-        if (gameRoomIds.has(String(user.username))) {
-          console.log("game finished", gameRoom.roomId);
-          gameRoom.setWinner();
-          gameRoomIds.delete(String(user.username));
-          gameRoomIds.delete(opponentId);
-          gameRooms.delete(gameRoom.roomId);
-          io.to(socket.id)
-            .to(activeUsers.get(gameRoom.getOpponent(String(user.username))))
-            .emit("game-result", gameRoom);
+        if (!flashcards.length) {
+          waitingUsers.enqueue(opponentId);
+
+          return io
+            .to(socket.id)
+            .emit(
+              "error",
+              "Unable to generate quiz questions at the moment. Please try again later."
+            );
         }
-      }, combatTotalTime * 1000);
+        console.log("from join- ", flashcards);
+        gameRoom.addFlashCards(flashcards);
+        gameRoomIds.set(String(user.username), gameRoom.roomId);
+        gameRoomIds.set(opponentId, gameRoom.roomId);
+        gameRooms.set(gameRoom.roomId, gameRoom);
+        console.log(`room created: ${gameRoom.toString()}`);
 
-      // send user the data
-      io.to(socket.id)
-        .to(activeUsers.get(gameRoom.getOpponent(user.username)))
-        .emit("join", gameRoom.toObject());
-    } else {
-      console.log(`room added to queue: ${user.username}`);
-      waitingUsers.enqueue(String(user.username));
+        setTimeout(() => {
+          if (gameRoomIds.has(String(user.username))) {
+            console.log("game finished", gameRoom.roomId);
+            gameRoom.setWinner();
+            gameRoomIds.delete(String(user.username));
+            gameRoomIds.delete(opponentId);
+            gameRooms.delete(gameRoom.roomId);
+            io.to(socket.id)
+              .to(activeUsers.get(gameRoom.getOpponent(String(user.username))))
+              .emit("game-result", gameRoom);
+          }
+        }, combatTotalTime * 1000);
+
+        // send user the data
+        io.to(socket.id)
+          .to(activeUsers.get(gameRoom.getOpponent(user.username)))
+          .emit("join", gameRoom.toObject());
+      } else {
+        console.log(`room added to queue: ${user.username}`);
+        waitingUsers.enqueue(String(user.username));
+      }
+      console.log(`waiting users: `);
+      waitingUsers.print();
+    } catch (err) {
+      console.error("Join error:", err);
+
+      io.to(socket.id).emit(
+        "error",
+        "Something went wrong while creating the game."
+      );
     }
-    console.log(`waiting users: `);
-    waitingUsers.print();
   });
 
   // user sends answer
