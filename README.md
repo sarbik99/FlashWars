@@ -123,7 +123,7 @@ cd server
 <img src='frontend/public/temp/revise.PNG'>
 <img src='frontend/public/temp/flipping.PNG'>
 
-🌐 *Visit our website:* [FlashWars](https://flashwars.onrender.com/)  
+🌐 *Visit our website:* [FlashWars](https://flashwarss.onrender.com/)  
 <br>
 
  ## <h2 style="font-size:3rem;">Our Team <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Smilies/Red%20Heart.png" alt="Red Heart" width="40" height="40" /></h2>
