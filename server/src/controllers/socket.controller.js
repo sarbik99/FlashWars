@@ -119,7 +119,23 @@ export const onConnectionController = (socket) => {
   socket.on("join", async () => {
     try {
       if (!waitingUsers.isEmpty()) {
+        console.log("Queue before dequeue:");
+        waitingUsers.print();
+
         const opponentId = waitingUsers.dequeue();
+
+        console.log("Current user:", user.username);
+        console.log("Opponent:", opponentId);
+
+        // Safety check: don't match a player with themselves
+        if (opponentId === user.username) {
+          console.log("Matched with self. Re-adding to queue.");
+
+          waitingUsers.enqueue(user.username);
+
+          return;
+        }
+
         const gameRoom = new GameRoom(user.username, opponentId);
 
         //fetch flashcards
@@ -161,6 +177,11 @@ export const onConnectionController = (socket) => {
           .to(activeUsers.get(gameRoom.getOpponent(user.username)))
           .emit("join", gameRoom.toObject());
       } else {
+        // Don't allow users already in a room to join the queue again
+        if (gameRoomIds.has(String(user.username))) {
+          return;
+        }
+
         console.log(`room added to queue: ${user.username}`);
         waitingUsers.enqueue(String(user.username));
       }
@@ -194,8 +215,11 @@ export const onConnectionController = (socket) => {
 
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${user?.username}, ${socket.id}`);
-    waitingUsers.delete(String(activeUsers.get(user?.username)));
-    activeUsers.delete(String(user?.username));
+
+    waitingUsers.delete(String(user.username));
+
+    activeUsers.delete(String(user.username));
+
     console.log(activeUsers);
   });
 };
