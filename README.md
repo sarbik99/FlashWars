@@ -70,7 +70,7 @@ Follow the steps below to set up and run the project locally:
 ## 1. Clone the Repository
 Clone the repository to your local machine using the following command:
 bash
-https://github.com/drag0n-3mperor/FlashWars.git
+https://github.com/sarbik99/FlashWars.git
 
 
 ## 2. Run the Frontend
