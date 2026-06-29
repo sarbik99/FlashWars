@@ -1,69 +1,49 @@
-import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import { BrevoClient } from "@getbrevo/brevo";
 
 dotenv.config({
   path: "./.env",
 });
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // STARTTLS
-  requireTLS: true,
-
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-
-  connectionTimeout: 30000,
-  greetingTimeout: 30000,
-  socketTimeout: 30000,
-});
-
-// Verify SMTP connection when the server starts
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ SMTP Verification Failed");
-    console.error(error);
-  } else {
-    console.log("✅ SMTP Server is ready");
-  }
+const brevo = new BrevoClient({
+  apiKey: process.env.BREVO_API_KEY,
 });
 
 const sendMail = async (to, subject, text) => {
   try {
     console.log("--------------------------------");
-    console.log("Sending email...");
+    console.log("Sending email via Brevo...");
     console.log("To:", to);
-    console.log("From:", process.env.EMAIL_USER);
-    console.log("EMAIL_USER exists:", !!process.env.EMAIL_USER);
-    console.log("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
     console.log("--------------------------------");
 
-    const mailOptions = {
-      from: `"FlashWars" <${process.env.EMAIL_USER}>`,
-      to,
+    const response = await brevo.transactionalEmails.sendTransacEmail({
+      sender: {
+        name: "FlashWars",
+        email: process.env.BREVO_SENDER_EMAIL,
+      },
+      to: [
+        {
+          email: to,
+        },
+      ],
       subject,
-      text,
-    };
+      textContent: text,
+    });
 
-    const info = await transporter.sendMail(mailOptions);
-
-    console.log("Email sent successfully");
-    console.log(info.response);
+    console.log("Email sent!");
+    console.log(response);
 
     return {
       success: true,
-      info,
+      info: response,
     };
-  } catch (error) {
-    console.error("Email sending failed");
-    console.error(error);
+  } catch (err) {
+    console.error("Brevo Error:");
+    console.error(err);
 
     return {
       success: false,
-      error,
+      error: err,
     };
   }
 };
