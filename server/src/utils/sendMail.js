@@ -5,56 +5,60 @@ dotenv.config({
   path: "./.env",
 });
 
-// Debug environment variables
-console.log("EMAIL_USER:", process.env.EMAIL_USER);
-console.log("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
-
-// Create transporter
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 465,
-  secure: true, // SSL
+  port: 587,
+  secure: false, // STARTTLS
+  requireTLS: true,
+
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  connectionTimeout: 30000, // 30 seconds
+
+  connectionTimeout: 30000,
   greetingTimeout: 30000,
   socketTimeout: 30000,
 });
 
-// Verify SMTP connection when server starts
+// Verify SMTP connection when the server starts
 transporter.verify((error, success) => {
   if (error) {
-    console.error("SMTP VERIFY FAILED");
+    console.error("❌ SMTP Verification Failed");
     console.error(error);
   } else {
-    console.log("SMTP SERVER READY");
+    console.log("✅ SMTP Server is ready");
   }
 });
 
-// Send mail
 const sendMail = async (to, subject, text) => {
   try {
+    console.log("--------------------------------");
+    console.log("Sending email...");
+    console.log("To:", to);
+    console.log("From:", process.env.EMAIL_USER);
+    console.log("EMAIL_USER exists:", !!process.env.EMAIL_USER);
+    console.log("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
+    console.log("--------------------------------");
+
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"FlashWars" <${process.env.EMAIL_USER}>`,
       to,
       subject,
       text,
     };
 
-    console.log(`Sending email to ${to}...`);
-
     const info = await transporter.sendMail(mailOptions);
 
-    console.log("Email sent:", info.response);
+    console.log("Email sent successfully");
+    console.log(info.response);
 
     return {
       success: true,
       info,
     };
   } catch (error) {
-    console.error("Email sending failed:");
+    console.error("Email sending failed");
     console.error(error);
 
     return {
